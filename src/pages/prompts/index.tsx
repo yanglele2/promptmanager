@@ -1,34 +1,123 @@
-import { useEffect, useState } from 'react'
-import Layout from '@/components/Layout'
-import { useStore } from '@/lib/store'
-import { supabase } from '@/lib/supabase'
-import Link from 'next/link'
-import TagFilter from '@/components/TagFilter'
-import type { Tag, Folder, PromptWithTags } from '@/types/index'
-import { FiSearch, FiPlus, FiTag, FiClock, FiEdit3, FiTrash2, FiFolder, FiFolderPlus, FiCopy, FiPlay } from 'react-icons/fi'
-import { toast } from 'react-hot-toast'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
+import Link from 'next/link'
+import { FiPlus, FiSearch, FiFolder, FiFolderPlus, FiEdit3, FiTrash2, FiTag, FiCopy, FiPlay, FiClock, FiSettings, FiUpload } from 'react-icons/fi'
+import { toast } from 'react-hot-toast'
+import Layout from '@/components/Layout'
+import TagFilter from '@/components/TagFilter'
+import ImportPromptsModal from '@/components/ImportPromptsModal'
+import { supabase } from '@/lib/supabase'
+
+// 类型定义
+interface Tag {
+  id: string
+  name: string
+  user_id?: string
+}
+
+interface Folder {
+  id: string
+  name: string
+  description?: string | null
+  user_id: string
+  parent_id?: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface Prompt {
+  id: string
+  title: string
+  content: string
+  description: string
+  created_at: string
+  folder_id: string | null
+  user_id?: string
+}
+
+interface PromptTag {
+  tags: Tag
+}
+
+interface PromptWithTags extends Prompt {
+  prompt_tags?: PromptTag[]
+}
 
 export default function Prompts() {
-  const { prompts, setPrompts, tags, setTags } = useStore()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [prompts, setPrompts] = useState<PromptWithTags[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [selectedFolder, setSelectedFolder] = useState('')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [sortBy, setSortBy] = useState<'created_at' | 'title'>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-  const [folders, setFolders] = useState<Folder[]>([])
-  const [selectedFolder, setSelectedFolder] = useState<string>('')
+  const [showFolderModal, setShowFolderModal] = useState(false)
   const [showNewFolderModal, setShowNewFolderModal] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [showFolderModal, setShowFolderModal] = useState(false)
   const [folderName, setFolderName] = useState('')
   const [folderDescription, setFolderDescription] = useState('')
   const [editingFolder, setEditingFolder] = useState<Folder | null>(null)
+  const [selectedPromptId, setSelectedPromptId] = useState('')
   const [showFolderSelect, setShowFolderSelect] = useState(false)
-  const [selectedPromptId, setSelectedPromptId] = useState<string>('')
-  const router = useRouter()
+  const [pageSize, setPageSize] = useState(10)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [isManaging, setIsManaging] = useState(false)
+  const [selectedPrompts, setSelectedPrompts] = useState<string[]>([])
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
+  const [showImportModal, setShowImportModal] = useState(false)
+
+  // 添加编辑处理函数
+  const handleEdit = (promptId: string) => {
+    router.push(`/prompts/${promptId}`)
+  }
+
+  // 添加方框点击处理函数
+  const handleSquareClick = (e: React.MouseEvent, promptId: string) => {
+    e.stopPropagation() // 阻止事件冒泡
+    setSelectedCardId(promptId === selectedCardId ? null : promptId)
+  }
+
+  // 添加文件夹修改处理函数
+  const handleFolderChange = async (promptId: string, folderId: string) => {
+    try {
+      // 先删除现有的文件夹关联
+      const { error: deleteError } = await supabase
+        .from('prompt_folders')
+        .delete()
+        .eq('prompt_id', promptId)
+
+      if (deleteError) throw deleteError
+
+      // 如果选择了文件夹，则添加新的关联
+      if (folderId) {
+        const { error: insertError } = await supabase
+          .from('prompt_folders')
+          .insert({
+            prompt_id: promptId,
+            folder_id: folderId
+          })
+
+        if (insertError) throw insertError
+      }
+
+      // 更新本地状态
+      setPrompts(prompts.map(p => 
+        p.id === promptId 
+          ? { ...p, folder_id: folderId }
+          : p
+      ))
+      
+      toast.success('文件夹修改成功')
+    } catch (error) {
+      console.error('修改文件夹失败:', error)
+      toast.error('修改文件夹失败')
+    }
+  }
 
   useEffect(() => {
     const fetchData = async () => {
@@ -301,6 +390,7 @@ export default function Prompts() {
     setShowFolderModal(true)
   }
 
+  // 过滤和排序后的提示词列表
   const filteredPrompts = prompts.filter((prompt) => {
     const matchesSearch =
       prompt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -310,7 +400,7 @@ export default function Prompts() {
 
     if (selectedTags.length === 0) return matchesSearch && matchesFolder
 
-    const promptTags = prompt.prompt_tags?.map(pt => pt.tags.id) ?? []
+    const promptTags = prompt.prompt_tags?.map((pt: PromptTag) => pt.tags.id) ?? []
     return matchesSearch && matchesFolder && selectedTags.every(tag => promptTags.includes(tag))
   }).sort((a, b) => {
     const factor = sortOrder === 'asc' ? 1 : -1
@@ -320,94 +410,98 @@ export default function Prompts() {
     return factor * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   })
 
-  const renderPromptCard = (prompt: PromptWithTags) => (
-    <div key={prompt.id} className="relative bg-white rounded-lg shadow p-6">
-      <div className="flex justify-between items-start">
-        <h3 className="text-lg font-medium text-gray-900 truncate">
-          {prompt.title}
-        </h3>
-        <div className="flex gap-2">
-          <select
-            value={prompt.folder_id || ''}
-            onChange={(e) => handleMoveToFolder(prompt.id, e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            className="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-          >
-            <option value="">选择文件夹</option>
-            {folders.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.name}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleEdit(prompt.id)
-            }}
-            className="p-1 text-gray-500 hover:text-indigo-600"
-          >
-            <FiEdit3 size={14} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleDelete(prompt.id)
-            }}
-            className="p-1 text-gray-500 hover:text-red-600"
-          >
-            <FiTrash2 size={14} />
-          </button>
-        </div>
-      </div>
-      <p className="mt-2 text-sm text-gray-500 line-clamp-2">
-        {prompt.description}
-      </p>
-      <div className="mt-4 flex items-center text-sm text-gray-500">
-        <FiClock className="mr-1.5 h-4 w-4 flex-shrink-0" />
-        {new Date(prompt.created_at).toLocaleDateString()}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {prompt.prompt_tags?.map((pt: { tags: Tag }) => (
-          <span
-            key={pt.tags.id}
-            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800"
-          >
-            <FiTag className="mr-1.5 h-3 w-3" />
-            {pt.tags.name}
-          </span>
-        ))}
-      </div>
-      <div className="mt-4 flex justify-end space-x-2">
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            navigator.clipboard.writeText(prompt.content)
-              .then(() => toast.success('提示词已复制到剪贴板'))
-              .catch(() => toast.error('复制失败'))
-          }}
-          className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <FiCopy className="mr-1.5 h-4 w-4" />
-          复制
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            // 使用 replace 而不是 push，避免历史记录堆栈问题
-            router.replace(`/chat/new?content=${encodeURIComponent(prompt.content)}`)
-          }}
-          className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          <FiPlay className="mr-1.5 h-4 w-4" />
-          点击运行
-        </button>
-      </div>
-    </div>
+  // 分页后的提示词列表
+  const paginatedPrompts = filteredPrompts.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
   )
 
-  const handleEdit = (promptId: string) => {
-    router.push(`/prompts/${promptId}`)
+  // 总页数
+  const totalPages = Math.ceil(filteredPrompts.length / pageSize)
+
+  // 修改批量删除的处理函数
+  const handleBatchDelete = async () => {
+    if (selectedPrompts.length === 0) return
+    if (!window.confirm(`确定要删除选中的 ${selectedPrompts.length} 个提示词吗？`)) return
+    
+    try {
+      const { error } = await supabase
+        .from('prompts')
+        .delete()
+        .in('id', selectedPrompts)
+
+      if (error) throw error
+
+      setPrompts(prompts.filter(p => !selectedPrompts.includes(p.id)))
+      setSelectedPrompts([])
+      toast.success('批量删除成功')
+    } catch (error) {
+      console.error('批量删除失败:', error)
+      toast.error('批量删除失败')
+    }
+  }
+
+  const handleImportPrompts = async (prompts: any[]) => {
+    try {
+      // 批量插入提示词
+      const { data: insertedPrompts, error: promptsError } = await supabase
+        .from('prompts')
+        .insert(
+          prompts.map(prompt => ({
+            title: prompt.title,
+            content: prompt.content,
+            description: prompt.description || null,
+            user_id: prompts[0]?.user_id, // 使用当前用户ID
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }))
+        )
+        .select()
+
+      if (promptsError) throw promptsError
+
+      // 处理标签
+      for (let i = 0; i < prompts.length; i++) {
+        const prompt = prompts[i]
+        const insertedPrompt = insertedPrompts[i]
+        
+        if (prompt.tags) {
+          const tags = prompt.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean)
+          
+          for (const tagName of tags) {
+            // 创建或获取标签
+            const { data: tag, error: tagError } = await supabase
+              .from('tags')
+              .upsert({ name: tagName }, { onConflict: 'name' })
+              .select()
+              .single()
+
+            if (tagError) {
+              console.error('处理标签失败:', tagError)
+              continue
+            }
+
+            // 创建提示词和标签的关联
+            const { error: linkError } = await supabase
+              .from('prompt_tags')
+              .insert({
+                prompt_id: insertedPrompt.id,
+                tag_id: tag.id
+              })
+
+            if (linkError) {
+              console.error('关联标签失败:', linkError)
+            }
+          }
+        }
+      }
+
+      // 刷新提示词列表
+      fetchPrompts()
+    } catch (error) {
+      console.error('Import error:', error)
+      throw error
+    }
   }
 
   if (error) {
@@ -429,6 +523,13 @@ export default function Prompts() {
             </p>
           </div>
           <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none space-x-4">
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              <FiUpload className="w-4 h-4 mr-2" />
+              批量导入
+            </button>
             <Link
               href="/prompts/new"
               className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto gap-2"
@@ -544,135 +645,100 @@ export default function Prompts() {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-4">
               <select
-                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                value={selectedFolder}
-                onChange={(e) => setSelectedFolder(e.target.value)}
-              >
-                <option value="">所有文件夹</option>
-                {folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>
-                    {folder.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as 'created_at' | 'title')}
+                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
               >
                 <option value="created_at">按时间</option>
                 <option value="title">按标题</option>
               </select>
               <button
-                onClick={() => setSortOrder(order => order === 'asc' ? 'desc' : 'asc')}
+                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
                 className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
               >
                 {sortOrder === 'asc' ? '升序' : '降序'}
               </button>
               <button
-                onClick={() => setViewMode(mode => mode === 'grid' ? 'list' : 'grid')}
+                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
                 className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
               >
                 {viewMode === 'grid' ? '列表视图' : '网格视图'}
               </button>
+                <button
+                onClick={() => setIsManaging(!isManaging)}
+                className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                >
+                <FiSettings className={`w-5 h-5 ${isManaging ? 'text-indigo-600' : 'text-gray-500'}`} />
+                </button>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              >
+                <option value="10">10条/页</option>
+                <option value="30">30条/页</option>
+                <option value="50">50条/页</option>
+              </select>
+              </div>
+            </div>
+
+          {isManaging && (
+            <div className="bg-gray-50 p-4 rounded-lg mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <label className="flex items-center">
+                    <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                    checked={selectedPrompts.length === filteredPrompts.length}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedPrompts(filteredPrompts.map(p => p.id))
+                      } else {
+                        setSelectedPrompts([])
+                      }
+                    }}
+                  />
+                  <span className="ml-2 text-sm text-gray-700">全选</span>
+                </label>
+                <span className="text-sm text-gray-500">
+                  已选择 {selectedPrompts.length} 项
+                </span>
+                  </div>
+              <div className="flex gap-2">
+                  <button
+                  onClick={handleBatchDelete}
+                  disabled={selectedPrompts.length === 0}
+                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+                >
+                  <FiTrash2 className="mr-1.5 h-4 w-4" />
+                  批量删除
+                  </button>
             </div>
           </div>
-          <TagFilter
+        )}
+
+          {/* 暂时隐藏标签筛选功能 */}
+          {/* <TagFilter
             tags={tags}
             selectedTags={selectedTags}
-            onTagSelect={(tagId) => {
+            onTagSelect={(tagId: string) => {
               setSelectedTags((prev) =>
                 prev.includes(tagId)
                   ? prev.filter((id) => id !== tagId)
                   : [...prev, tagId]
               )
             }}
-          />
+          /> */}
         </div>
-
-        {/* 新建文件夹模态框 */}
-        {showNewFolderModal && (
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">
-            <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">新建文件夹</h3>
-              <input
-                type="text"
-                placeholder="输入文件夹名称"
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm mb-4"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setShowNewFolderModal(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={createFolder}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
-                >
-                  创建
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 文件夹创建/编辑模态框 */}
-        {showFolderModal && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-              <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setShowFolderModal(false)} />
-              <div className="relative inline-block transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6 sm:align-middle">
-                <div>
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-                    {editingFolder ? '编辑文件夹' : '新建文件夹'}
-                  </h3>
-                  <div className="mt-2">
-                    <input
-                      type="text"
-                      placeholder="文件夹名称"
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      value={folderName}
-                      onChange={(e) => setFolderName(e.target.value)}
-                    />
-                    <textarea
-                      placeholder="文件夹描述（可选）"
-                      className="mt-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                      value={folderDescription}
-                      onChange={(e) => setFolderDescription(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                <div className="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
-                  <button
-                    type="button"
-                    className="inline-flex w-full justify-center rounded-md border border-transparent bg-indigo-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-2 sm:text-sm"
-                    onClick={editingFolder ? handleUpdateFolder : handleCreateFolder}
-                  >
-                    {editingFolder ? '更新' : '创建'}
-                  </button>
-                  <button
-                    type="button"
-                    className="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:col-start-1 sm:mt-0 sm:text-sm"
-                    onClick={() => setShowFolderModal(false)}
-                  >
-                    取消
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="mt-8">
           {loading ? (
-            <div className="text-center py-8">
+            <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
               <p className="mt-2 text-gray-500">加载中...</p>
             </div>
@@ -691,65 +757,37 @@ export default function Prompts() {
                 </Link>
               </div>
             </div>
-          ) : viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredPrompts.map(renderPromptCard)}
-            </div>
           ) : (
-            <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      标题
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      描述
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      标签
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      文件夹
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      创建时间
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      操作
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredPrompts.map((prompt) => (
-                    <tr key={prompt.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
+            <div className="flex flex-col">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                {filteredPrompts.map((prompt) => (
+                  <div
+                    key={prompt.id}
+                    className={`relative bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 ${
+                      prompt.id === selectedCardId ? 'bg-blue-50' : ''
+                    } hover:bg-blue-50`}
+                    style={{ height: '240px' }}
+                    onClick={() => {
+                      if (isManaging) {
+                        setSelectedPrompts(prev =>
+                          prev.includes(prompt.id)
+                            ? prev.filter(id => id !== prompt.id)
+                            : [...prev, prompt.id]
+                        )
+                      } else {
+                        router.push(`/prompts/${prompt.id}`)
+                      }
+                    }}
+                  >
+                    <div className="p-6 h-full flex flex-col">
+                      <div className="flex justify-between items-start mb-4">
+                        <h3 className="text-lg font-medium text-gray-900 truncate flex-1 pr-4">
                           {prompt.title}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-500 line-clamp-2">
-                          {prompt.description}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {prompt.prompt_tags?.map((pt: { tags: Tag }) => (
-                            <span
-                              key={pt.tags.id}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800"
-                            >
-                              <FiTag className="mr-1.5 h-3 w-3" />
-                              {pt.tags.name}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                        </h3>
+                        <div className="flex items-center gap-2 ml-4 flex-shrink-0">
                         <select
                           value={prompt.folder_id || ''}
-                          onChange={(e) => handleMoveToFolder(prompt.id, e.target.value)}
+                            onChange={(e) => handleFolderChange(prompt.id, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
                           className="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                         >
@@ -760,36 +798,147 @@ export default function Prompts() {
                             </option>
                           ))}
                         </select>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
+                          {isManaging && (
+                            <input
+                              type="checkbox"
+                              checked={selectedPrompts.includes(prompt.id)}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                setSelectedPrompts(prev =>
+                                  prev.includes(prompt.id)
+                                    ? prev.filter(id => id !== prompt.id)
+                                    : [...prev, prompt.id]
+                                )
+                              }}
+                              className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            />
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEdit(prompt.id)
+                            }}
+                            className="p-1 text-gray-500 hover:text-indigo-600"
+                          >
+                            <FiEdit3 size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(prompt.id)
+                            }}
+                            className="p-1 text-gray-500 hover:text-red-600"
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500 line-clamp-2 flex-1">
+                        {prompt.description}
+                      </p>
+                      <div className="mt-auto">
+                        <div className="flex flex-wrap gap-2 mb-4">
+                          {prompt.prompt_tags?.map((pt: PromptTag) => (
+                            <span
+                              key={pt.tags.id}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800"
+                            >
+                              <FiTag className="mr-1.5 h-3 w-3" />
+                              {pt.tags.name}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="text-sm text-gray-500 flex items-center">
+                            <FiClock className="mr-1.5 h-4 w-4" />
                           {new Date(prompt.created_at).toLocaleDateString()}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="flex justify-end gap-2">
+                          <div className="flex gap-2">
                           <button
-                            onClick={() => handleEdit(prompt.id)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            <FiEdit3 className="h-4 w-4" />
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                navigator.clipboard.writeText(prompt.content)
+                                  .then(() => toast.success('提示词已复制到剪贴板'))
+                                  .catch(() => toast.error('复制失败'))
+                              }}
+                              className="inline-flex items-center px-2 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                            >
+                              <FiCopy className="mr-1.5 h-4 w-4" />
+                              复制提示词内容
                           </button>
                           <button
-                            onClick={() => handleDelete(prompt.id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <FiTrash2 className="h-4 w-4" />
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                router.replace(`/chat/new?content=${encodeURIComponent(prompt.content)}`)
+                              }}
+                              className="inline-flex items-center px-2 py-1 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                            >
+                              <FiPlay className="mr-1.5 h-4 w-4" />
+                              运行
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center mt-4">
+                <div className="text-sm text-gray-700">
+                  显示第 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> 到{' '}
+                  <span className="font-medium">
+                    {Math.min(currentPage * pageSize, filteredPrompts.length)}
+                  </span>{' '}
+                  条，共{' '}
+                  <span className="font-medium">{filteredPrompts.length}</span> 条
+                </div>
+                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                  >
+                    <span className="sr-only">上一页</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  {Array.from({ length: Math.ceil(filteredPrompts.length / pageSize), }, (_, i) => i + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
+                        page === currentPage
+                          ? 'z-10 bg-indigo-600 text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
+                          : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0'
+                      }`}
+                    >
+                      {page}
+                    </button>
                   ))}
-                </tbody>
-              </table>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredPrompts.length / pageSize)))}
+                    disabled={currentPage === Math.ceil(filteredPrompts.length / pageSize)}
+                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
+                  >
+                    <span className="sr-only">下一页</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      <ImportPromptsModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImport={handleImportPrompts}
+      />
     </Layout>
   )
 } 
