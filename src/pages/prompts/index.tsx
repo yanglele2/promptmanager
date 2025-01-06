@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import { FiPlus, FiSearch, FiFolder, FiFolderPlus, FiEdit3, FiTrash2, FiTag, FiCopy, FiPlay, FiClock, FiSettings, FiUpload } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiFolder, FiFolderPlus, FiEdit3, FiTrash2, FiTag, FiCopy, FiPlay, FiClock, FiSettings, FiUpload, FiZap } from 'react-icons/fi'
 import { toast } from 'react-hot-toast'
 import Layout from '@/components/Layout'
 import TagFilter from '@/components/TagFilter'
 import ImportPromptsModal from '@/components/ImportPromptsModal'
+import SuggestEditButton from '@/components/SuggestEditButton'
 import { supabase } from '@/lib/supabase'
+import GeneratePromptModal from '@/components/GeneratePromptModal'
+import { useSession } from '@/lib/hooks'
 
 // 类型定义
 interface Tag {
@@ -45,6 +48,7 @@ interface PromptWithTags extends Prompt {
 
 export default function Prompts() {
   const router = useRouter()
+  const { session } = useSession()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [prompts, setPrompts] = useState<PromptWithTags[]>([])
@@ -70,6 +74,7 @@ export default function Prompts() {
   const [selectedPrompts, setSelectedPrompts] = useState<string[]>([])
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   // 添加编辑处理函数
   const handleEdit = (promptId: string) => {
@@ -504,6 +509,35 @@ export default function Prompts() {
     }
   }
 
+  const handleSuggestEdit = () => {
+    // 这里添加建议编辑的处理逻辑
+  }
+
+  const handleGenerate = async (prompt: { title: string, content: string, description: string }) => {
+    try {
+      // 创建提示词
+      const { data: promptData, error: promptError } = await supabase
+        .from('prompts')
+        .insert({
+          title: prompt.title,
+          content: prompt.content,
+          description: prompt.description,
+          user_id: session?.user?.id,
+        })
+        .select()
+        .single()
+
+      if (promptError) throw promptError
+
+      // 刷新提示词列表
+      fetchPrompts()
+      toast.success('提示词创建成功')
+    } catch (error) {
+      console.error('创建提示词失败:', error)
+      toast.error('创建提示词失败')
+    }
+  }
+
   if (error) {
     return (
       <Layout>
@@ -529,6 +563,13 @@ export default function Prompts() {
             >
               <FiUpload className="w-4 h-4 mr-2" />
               批量导入
+            </button>
+            <button
+              onClick={() => setShowGenerateModal(true)}
+              className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              <FiZap className="w-4 h-4 mr-2" />
+              生成提示词
             </button>
             <Link
               href="/prompts/new"
@@ -938,6 +979,15 @@ export default function Prompts() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onImport={handleImportPrompts}
+      />
+      <SuggestEditButton 
+        onClick={handleSuggestEdit} 
+        onGenerateClick={() => setShowGenerateModal(true)}
+      />
+      <GeneratePromptModal
+        isOpen={showGenerateModal}
+        onClose={() => setShowGenerateModal(false)}
+        onGenerate={handleGenerate}
       />
     </Layout>
   )

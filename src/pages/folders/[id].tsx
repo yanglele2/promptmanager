@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { supabase } from '@/lib/supabase';
-import { Folder, Prompt } from '@/types';
+import { Folder, Prompt } from '@/types/';
 import Link from 'next/link';
 import { FolderIcon, DocumentIcon } from '@heroicons/react/24/outline';
 
