@@ -10,6 +10,7 @@ import {
   FiChevronRight,
   FiList,
   FiPlusCircle,
+  FiSettings,
 } from 'react-icons/fi'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
@@ -26,6 +27,7 @@ const navigation = [
       { name: '新建聊天', href: '/chat/new', icon: FiPlusCircle },
     ],
   },
+  { name: '设置', href: '/settings', icon: FiSettings },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {

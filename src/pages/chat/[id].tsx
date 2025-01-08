@@ -6,6 +6,7 @@ import { useRouter } from 'next/router'
 import { toast } from 'react-hot-toast'
 import ChatMessageComponent from '@/components/ChatMessage'
 import { FiEdit2, FiCheck, FiX } from 'react-icons/fi'
+import ChatStatus from '@/components/ChatStatus'
 
 export default function ChatDetail() {
   const [chat, setChat] = useState<Chat | null>(null)
@@ -235,18 +236,156 @@ export default function ChatDetail() {
     }
   }
 
+  const handleRewriteWithContent = async (messageId: string, newContent: string) => {
+    try {
+      const messageToRewrite = messages.find(m => m.id === messageId)
+      if (!messageToRewrite) return
+
+      setSending(true)
+
+      // 获取完整的对话上下文
+      const messageIndex = messages.findIndex(m => m.id === messageId)
+      const contextMessages = messages.slice(0, messageIndex + 1).map(m => ({
+        role: m.role,
+        content: m.id === messageId ? newContent : m.content
+      }))
+
+      // 更新用户消息
+      const { error: updateError } = await supabase
+        .from('messages')
+        .update({ content: newContent })
+        .eq('id', messageId)
+
+      if (updateError) throw updateError
+
+      // 更新本地状态
+      const updatedMessages = messages.map(m => 
+        m.id === messageId ? { ...m, content: newContent } : m
+      )
+      setMessages(updatedMessages)
+
+      // 获取新的 AI 回复
+      const response = await fetch('/api/chat/completion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: contextMessages })
+      })
+
+      if (!response.ok) throw new Error('Failed to get completion')
+      
+      const { response: aiResponse } = await response.json()
+
+      // 找到当前消息后的第一个 AI 回复
+      const nextAiMessage = messages
+        .slice(messageIndex + 1)
+        .find(m => m.role === 'assistant')
+
+      if (nextAiMessage) {
+        // 更新 AI 回复
+        const { error: aiUpdateError } = await supabase
+          .from('messages')
+          .update({ content: aiResponse })
+          .eq('id', nextAiMessage.id)
+
+        if (aiUpdateError) throw aiUpdateError
+
+        // 更新本地状态
+        setMessages(prevMessages => 
+          prevMessages.map(m => 
+            m.id === nextAiMessage.id ? { ...m, content: aiResponse } : m
+          )
+        )
+      } else {
+        // 如果没有找到下一条 AI 消息，创建新的回复
+        const { data: newMessage, error: insertError } = await supabase
+          .from('messages')
+          .insert([
+            {
+              chat_id: id,
+              role: 'assistant',
+              content: aiResponse
+            }
+          ])
+          .select()
+          .single()
+
+        if (insertError) throw insertError
+
+        // 更新本地状态
+        setMessages(prevMessages => [...prevMessages, newMessage])
+      }
+
+      toast.success('内容已更新')
+    } catch (error) {
+      console.error('Error updating content:', error)
+      toast.error('更新内容失败')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // 同样修改 handleRewriteMessage 函数
+  const handleRewriteMessage = async (messageId: string) => {
+    try {
+      const messageToRewrite = messages.find(m => m.id === messageId)
+      if (!messageToRewrite) return
+
+      setSending(true)
+
+      // 获取完整的对话上下文
+      const messageIndex = messages.findIndex(m => m.id === messageId)
+      const contextMessages = messages.slice(0, messageIndex).map(m => ({
+        role: m.role,
+        content: m.content
+      }))
+
+      // 发送请求重新生成回复
+      const response = await fetch('/api/chat/completion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: contextMessages })
+      })
+
+      if (!response.ok) throw new Error('Failed to get completion')
+      
+      const { response: newContent } = await response.json()
+
+      // 更新数据库
+      const { error } = await supabase
+        .from('messages')
+        .update({ content: newContent })
+        .eq('id', messageId)
+
+      if (error) throw error
+
+      // 更新本地状态
+      setMessages(prevMessages => 
+        prevMessages.map(m => 
+          m.id === messageId ? { ...m, content: newContent } : m
+        )
+      )
+
+      toast.success('回复已重新生成')
+    } catch (error) {
+      console.error('Error rewriting message:', error)
+      toast.error('重新生成回复失败')
+    } finally {
+      setSending(false)
+    }
+  }
+
   if (!id) return null
 
   return (
     <Layout>
-      <div className="flex flex-col h-screen">
+      <div className="flex flex-col h-screen bg-gray-50">
         {/* 标题栏 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <div className="flex items-center gap-4 flex-1">
+        <div className="flex items-center justify-between px-6 py-4 bg-white border-b shadow-sm">
+          <div className="flex items-center gap-4 flex-1 max-w-screen-xl mx-auto w-full">
             {/* 返回按钮 */}
             <button
               onClick={() => router.push('/chat')}
-              className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-gray-700 bg-gray-100 hover:bg-gray-200"
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
             >
               返回列表
             </button>
@@ -258,19 +397,19 @@ export default function ChatDetail() {
                   type="text"
                   value={editedTitle}
                   onChange={(e) => setEditedTitle(e.target.value)}
-                  className="flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   placeholder="输入对话标题"
                   autoFocus
                 />
                 <button
                   onClick={handleSaveTitle}
-                  className="p-1 text-green-600 hover:text-green-700"
+                  className="p-2 text-green-600 hover:text-green-700 transition-colors"
                 >
                   <FiCheck className="w-5 h-5" />
                 </button>
                 <button
                   onClick={handleCancelEdit}
-                  className="p-1 text-gray-600 hover:text-gray-700"
+                  className="p-2 text-gray-600 hover:text-gray-700 transition-colors"
                 >
                   <FiX className="w-5 h-5" />
                 </button>
@@ -282,7 +421,7 @@ export default function ChatDetail() {
                 </h1>
                 <button
                   onClick={handleEditTitle}
-                  className="p-1 text-gray-400 hover:text-gray-600"
+                  className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <FiEdit2 className="w-4 h-4" />
                 </button>
@@ -292,39 +431,45 @@ export default function ChatDetail() {
         </div>
 
         {/* 消息列表 */}
-        <div className="flex-1 overflow-y-auto bg-gray-50">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-screen-xl mx-auto w-full">
+            <div className="space-y-6 py-6 px-4 sm:px-6">
+              {messages.map((message, index) => (
+                <ChatMessageComponent
+                  key={message.id || index}
+                  message={message}
+                />
+              ))}
+              
+              {/* 添加状态指示器 */}
+              <ChatStatus sending={sending} />
             </div>
-          ) : (
-            <div className="max-w-4xl mx-auto py-6">
-              <div className="space-y-4">
-                {messages.map((message) => (
-                  <ChatMessageComponent key={message.id} message={message} />
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-          )}
+          </div>
+          <div ref={messagesEndRef} />
         </div>
 
         {/* 输入框 */}
-        <div className="bg-white border-t border-gray-200 px-4 py-4">
-          <div className="max-w-4xl mx-auto">
-            <form onSubmit={handleSubmit} className="flex space-x-4">
+        <div className="border-t bg-white shadow-sm">
+          <div className="max-w-screen-xl mx-auto w-full px-4 sm:px-6 py-4">
+            <form onSubmit={handleSubmit} className="relative">
               <input
                 type="text"
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                placeholder="输入消息..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="输入消息..."
                 disabled={sending}
+                className={`w-full px-6 py-3 pr-24 rounded-xl border ${
+                  sending ? 'bg-gray-50' : 'bg-white'
+                } focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm text-base`}
               />
               <button
                 type="submit"
                 disabled={sending || !newMessage.trim()}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+                className={`absolute right-3 top-1/2 transform -translate-y-1/2 px-6 py-2 rounded-lg text-sm font-medium transition-all ${
+                  sending || !newMessage.trim()
+                    ? 'bg-gray-100 text-gray-400'
+                    : 'bg-purple-600 text-white hover:bg-purple-700 shadow-sm hover:shadow-md'
+                }`}
               >
                 {sending ? '发送中...' : '发送'}
               </button>

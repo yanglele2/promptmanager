@@ -44,10 +44,11 @@ export interface PromptFolder {
 
 export interface Chat {
   id: string
-  user_id: string
   title: string
   created_at: string
   updated_at: string
+  last_message?: string
+  user_id: string
 }
 
 export interface ChatMessage {
