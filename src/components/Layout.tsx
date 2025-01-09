@@ -11,6 +11,7 @@ import {
   FiList,
   FiPlusCircle,
   FiSettings,
+  FiTag,
 } from 'react-icons/fi'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
@@ -27,100 +28,19 @@ const navigation = [
       { name: '新建聊天', href: '/chat/new', icon: FiPlusCircle },
     ],
   },
+  { name: '标签管理', href: '/tags', icon: FiTag },
   { name: '设置', href: '/settings', icon: FiSettings },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [chatMenuOpen, setChatMenuOpen] = useState(true)
   const router = useRouter()
 
-  const renderNavItem = (item: any) => {
-    if (item.children) {
-      return (
-        <div key={item.name}>
-          <button
-            onClick={() => setChatMenuOpen(!chatMenuOpen)}
-            className={clsx(
-              'group flex w-full items-center px-2 py-2 text-sm font-medium rounded-md',
-              router.pathname.startsWith('/chat')
-                ? 'bg-gray-100 text-gray-900'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-            )}
-          >
-            <item.icon
-              className={clsx(
-                router.pathname.startsWith('/chat')
-                  ? 'text-gray-500'
-                  : 'text-gray-400 group-hover:text-gray-500',
-                'mr-3 flex-shrink-0 h-6 w-6'
-              )}
-            />
-            {item.name}
-            {chatMenuOpen ? (
-              <FiChevronDown className="ml-auto h-5 w-5" />
-            ) : (
-              <FiChevronRight className="ml-auto h-5 w-5" />
-            )}
-          </button>
-          {chatMenuOpen && (
-            <div className="ml-4 mt-1 space-y-1">
-              {item.children.map((child: any) => (
-                <Link
-                  key={child.name}
-                  href={child.href}
-                  className={clsx(
-                    'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
-                    router.pathname === child.href
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  )}
-                >
-                  <child.icon
-                    className={clsx(
-                      router.pathname === child.href
-                        ? 'text-gray-500'
-                        : 'text-gray-400 group-hover:text-gray-500',
-                      'mr-3 flex-shrink-0 h-6 w-6'
-                    )}
-                  />
-                  {child.name}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    return (
-      <Link
-        key={item.name}
-        href={item.href}
-        className={clsx(
-          'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
-          router.pathname === item.href
-            ? 'bg-gray-100 text-gray-900'
-            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-        )}
-      >
-        <item.icon
-          className={clsx(
-            router.pathname === item.href
-              ? 'text-gray-500'
-              : 'text-gray-400 group-hover:text-gray-500',
-            'mr-3 flex-shrink-0 h-6 w-6'
-          )}
-        />
-        {item.name}
-      </Link>
-    )
-  }
-
   return (
-    <div>
+    <div className="min-h-screen bg-gray-100">
+      {/* 移动端侧边栏 */}
       <Transition.Root show={sidebarOpen} as={Fragment}>
-        <Dialog as="div" className="relative z-40 md:hidden" onClose={setSidebarOpen}>
+        <Dialog as="div" className="relative z-50 lg:hidden" onClose={setSidebarOpen}>
           <Transition.Child
             as={Fragment}
             enter="transition-opacity ease-linear duration-300"
@@ -130,10 +50,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             leaveFrom="opacity-100"
             leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-gray-600 bg-opacity-75" />
+            <div className="fixed inset-0 bg-gray-900/80" />
           </Transition.Child>
 
-          <div className="fixed inset-0 z-40 flex">
+          <div className="fixed inset-0 flex">
             <Transition.Child
               as={Fragment}
               enter="transition ease-in-out duration-300 transform"
@@ -143,68 +63,254 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               leaveFrom="translate-x-0"
               leaveTo="-translate-x-full"
             >
-              <Dialog.Panel className="relative flex w-full max-w-xs flex-1 flex-col bg-white">
-                <Transition.Child
-                  as={Fragment}
-                  enter="ease-in-out duration-300"
-                  enterFrom="opacity-0"
-                  enterTo="opacity-100"
-                  leave="ease-in-out duration-300"
-                  leaveFrom="opacity-100"
-                  leaveTo="opacity-0"
-                >
-                  <div className="absolute top-0 right-0 -mr-12 pt-2">
-                    <button
-                      type="button"
-                      className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      <span className="sr-only">关闭侧边栏</span>
-                      <FiX className="h-6 w-6 text-white" aria-hidden="true" />
-                    </button>
+              <Dialog.Panel className="relative mr-16 flex w-full max-w-xs flex-1">
+                <div className="absolute left-full top-0 flex w-16 justify-center pt-5">
+                  <button type="button" className="-m-2.5 p-2.5" onClick={() => setSidebarOpen(false)}>
+                    <span className="sr-only">关闭侧边栏</span>
+                    <FiX className="h-6 w-6 text-white" aria-hidden="true" />
+                  </button>
+                </div>
+
+                <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-white px-6 pb-4">
+                  <div className="flex h-16 shrink-0 items-center">
+                    <span className="text-xl font-bold">提示词管理器</span>
                   </div>
-                </Transition.Child>
-                <div className="h-0 flex-1 overflow-y-auto pt-5 pb-4">
-                  <div className="flex flex-shrink-0 items-center px-4">
-                    <h1 className="text-xl font-bold text-gray-900">提示词管理器</h1>
-                  </div>
-                  <nav className="mt-5 space-y-1 px-2">
-                    {navigation.map((item) => renderNavItem(item))}
+                  <nav className="flex flex-1 flex-col">
+                    <ul role="list" className="flex flex-1 flex-col gap-y-7">
+                      <li>
+                        <ul role="list" className="-mx-2 space-y-1">
+                          {navigation.map((item) => 
+                            !item.children ? (
+                              <li key={item.name}>
+                                <Link
+                                  href={item.href}
+                                  className={clsx(
+                                    router.pathname === item.href
+                                      ? 'bg-gray-50 text-indigo-600'
+                                      : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                                    'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold'
+                                  )}
+                                >
+                                  <item.icon
+                                    className={clsx(
+                                      router.pathname === item.href ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600',
+                                      'h-6 w-6 shrink-0'
+                                    )}
+                                    aria-hidden="true"
+                                  />
+                                  {item.name}
+                                </Link>
+                              </li>
+                            ) : (
+                              <li key={item.name}>
+                                <div className="relative">
+                                  <button
+                                    type="button"
+                                    className={clsx(
+                                      router.pathname.startsWith(item.children[0].href)
+                                        ? 'bg-gray-50 text-indigo-600'
+                                        : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                                      'flex items-center w-full text-left rounded-md p-2 gap-x-3 text-sm leading-6 font-semibold'
+                                    )}
+                                    onClick={() => {
+                                      const el = document.getElementById(`${item.name}-submenu`)
+                                      if (el) {
+                                        el.classList.toggle('hidden')
+                                      }
+                                    }}
+                                  >
+                                    <item.icon
+                                      className={clsx(
+                                        router.pathname.startsWith(item.children[0].href)
+                                          ? 'text-indigo-600'
+                                          : 'text-gray-400 group-hover:text-indigo-600',
+                                        'h-6 w-6 shrink-0'
+                                      )}
+                                      aria-hidden="true"
+                                    />
+                                    {item.name}
+                                    <FiChevronDown
+                                      className={clsx(
+                                        'ml-auto h-5 w-5 shrink-0',
+                                        router.pathname.startsWith(item.children[0].href)
+                                          ? 'text-indigo-600'
+                                          : 'text-gray-400'
+                                      )}
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                  <div id={`${item.name}-submenu`} className="hidden">
+                                    {item.children.map((subItem) => (
+                                      <Link
+                                        key={subItem.name}
+                                        href={subItem.href}
+                                        className={clsx(
+                                          router.pathname === subItem.href
+                                            ? 'bg-gray-50 text-indigo-600'
+                                            : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                                          'flex gap-x-3 rounded-md p-2 pl-11 text-sm leading-6'
+                                        )}
+                                      >
+                                        <subItem.icon
+                                          className={clsx(
+                                            router.pathname === subItem.href
+                                              ? 'text-indigo-600'
+                                              : 'text-gray-400 group-hover:text-indigo-600',
+                                            'h-6 w-6 shrink-0'
+                                          )}
+                                          aria-hidden="true"
+                                        />
+                                        {subItem.name}
+                                      </Link>
+                                    ))}
+                                  </div>
+                                </div>
+                              </li>
+                            )
+                          )}
+                        </ul>
+                      </li>
+                    </ul>
                   </nav>
                 </div>
               </Dialog.Panel>
             </Transition.Child>
-            <div className="w-14 flex-shrink-0">{/* Force sidebar to shrink to fit close icon */}</div>
           </div>
         </Dialog>
       </Transition.Root>
 
-      {/* Static sidebar for desktop */}
-      <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
-        {/* Sidebar component, swap this element with another sidebar if you like */}
-        <div className="flex min-h-0 flex-1 flex-col border-r border-gray-200 bg-white">
-          <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
-            <div className="flex flex-shrink-0 items-center px-4">
-              <h1 className="text-xl font-bold text-gray-900">提示词管理器</h1>
-            </div>
-            <nav className="mt-5 flex-1 space-y-1 bg-white px-2">
-              {navigation.map((item) => renderNavItem(item))}
-            </nav>
+      {/* 桌面端侧边栏 */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 pb-4">
+          <div className="flex h-16 shrink-0 items-center">
+            <span className="text-xl font-bold">提示词管理器</span>
           </div>
+          <nav className="flex flex-1 flex-col">
+            <ul role="list" className="flex flex-1 flex-col gap-y-7">
+              <li>
+                <ul role="list" className="-mx-2 space-y-1">
+                  {navigation.map((item) => 
+                    !item.children ? (
+                      <li key={item.name}>
+                        <Link
+                          href={item.href}
+                          className={clsx(
+                            router.pathname === item.href
+                              ? 'bg-gray-50 text-indigo-600'
+                              : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                            'group flex gap-x-3 rounded-md p-2 text-sm leading-6 font-semibold'
+                          )}
+                        >
+                          <item.icon
+                            className={clsx(
+                              router.pathname === item.href ? 'text-indigo-600' : 'text-gray-400 group-hover:text-indigo-600',
+                              'h-6 w-6 shrink-0'
+                            )}
+                            aria-hidden="true"
+                          />
+                          {item.name}
+                        </Link>
+                      </li>
+                    ) : (
+                      <li key={item.name}>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            className={clsx(
+                              router.pathname.startsWith(item.children[0].href)
+                                ? 'bg-gray-50 text-indigo-600'
+                                : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                              'flex items-center w-full text-left rounded-md p-2 gap-x-3 text-sm leading-6 font-semibold'
+                            )}
+                            onClick={() => {
+                              const el = document.getElementById(`${item.name}-submenu-desktop`)
+                              if (el) {
+                                el.classList.toggle('hidden')
+                              }
+                            }}
+                          >
+                            <item.icon
+                              className={clsx(
+                                router.pathname.startsWith(item.children[0].href)
+                                  ? 'text-indigo-600'
+                                  : 'text-gray-400 group-hover:text-indigo-600',
+                                'h-6 w-6 shrink-0'
+                              )}
+                              aria-hidden="true"
+                            />
+                            {item.name}
+                            <FiChevronDown
+                              className={clsx(
+                                'ml-auto h-5 w-5 shrink-0',
+                                router.pathname.startsWith(item.children[0].href)
+                                  ? 'text-indigo-600'
+                                  : 'text-gray-400'
+                              )}
+                              aria-hidden="true"
+                            />
+                          </button>
+                          <div id={`${item.name}-submenu-desktop`} className="hidden">
+                            {item.children.map((subItem) => (
+                              <Link
+                                key={subItem.name}
+                                href={subItem.href}
+                                className={clsx(
+                                  router.pathname === subItem.href
+                                    ? 'bg-gray-50 text-indigo-600'
+                                    : 'text-gray-700 hover:text-indigo-600 hover:bg-gray-50',
+                                  'flex gap-x-3 rounded-md p-2 pl-11 text-sm leading-6'
+                                )}
+                              >
+                                <subItem.icon
+                                  className={clsx(
+                                    router.pathname === subItem.href
+                                      ? 'text-indigo-600'
+                                      : 'text-gray-400 group-hover:text-indigo-600',
+                                    'h-6 w-6 shrink-0'
+                                  )}
+                                  aria-hidden="true"
+                                />
+                                {subItem.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  )}
+                </ul>
+              </li>
+            </ul>
+          </nav>
         </div>
       </div>
-      <div className="flex flex-1 flex-col md:pl-64">
-        <div className="sticky top-0 z-10 bg-white pl-1 pt-1 sm:pl-3 sm:pt-3 md:hidden">
-          <button
-            type="button"
-            className="-ml-0.5 -mt-0.5 inline-flex h-12 w-12 items-center justify-center rounded-md text-gray-500 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <span className="sr-only">打开侧边栏</span>
-            <FiMenu className="h-6 w-6" aria-hidden="true" />
-          </button>
+
+      <div className="lg:pl-72">
+        <div className="sticky top-0 z-40 lg:mx-auto">
+          <div className="flex h-16 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <span className="sr-only">打开侧边栏</span>
+              <FiMenu className="h-6 w-6" aria-hidden="true" />
+            </button>
+
+            <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
+              <div className="flex flex-1"></div>
+              <div className="flex items-center gap-x-4 lg:gap-x-6">
+                {/* 添加用户头像等其他内容 */}
+              </div>
+            </div>
+          </div>
         </div>
-        <main className="flex-1">{children}</main>
+
+        <main className="py-4">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+            {children}
+          </div>
+        </main>
       </div>
     </div>
   )
