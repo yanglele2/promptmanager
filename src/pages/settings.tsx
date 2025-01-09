@@ -13,11 +13,10 @@ interface KeyState {
   loading: boolean;
 }
 
-type KeyName = 'deepseek' | 'dify' | 'supabaseUrl' | 'supabaseAnonKey' | 'supabaseServiceKey';
+type KeyName = 'deepseek' | 'supabaseUrl' | 'supabaseAnonKey' | 'supabaseServiceKey';
 
 interface KeysState {
   deepseek: KeyState;
-  dify: KeyState;
   supabaseUrl: KeyState;
   supabaseAnonKey: KeyState;
   supabaseServiceKey: KeyState;
@@ -26,7 +25,6 @@ interface KeysState {
 export default function Settings() {
   const [keys, setKeys] = useState<KeysState>({
     deepseek: { value: '', loading: false },
-    dify: { value: '', loading: false },
     supabaseUrl: { value: '', loading: false },
     supabaseAnonKey: { value: '', loading: false },
     supabaseServiceKey: { value: '', loading: false },
@@ -127,20 +125,6 @@ export default function Settings() {
         <Divider />
 
         <div>
-          <h3 className="text-lg font-medium mb-3">🎯 Dify API 配置</h3>
-          <div className="pl-4 space-y-2 text-gray-600">
-            <p>1. 访问 Dify 官网 <a href="https://dify.ai/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 inline-flex items-center">dify.ai <FiExternalLink className="ml-1" /></a></p>
-            <p>2. 注册或登录您的账号</p>
-            <p>3. 创建一个新应用或选择现有应用</p>
-            <p>4. 在应用设置中找到"API Keys"部分</p>
-            <p>5. 复制 API Key（以 "app-" 开头）</p>
-            <p>6. 将密钥粘贴到上方的 Dify API 密钥输入框中</p>
-          </div>
-        </div>
-
-        <Divider />
-
-        <div>
           <h3 className="text-lg font-medium mb-3">📦 Supabase 配置</h3>
           <div className="pl-4 space-y-2 text-gray-600">
             <p>1. 访问 Supabase 官网 <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 inline-flex items-center">supabase.com <FiExternalLink className="ml-1" /></a></p>
@@ -184,15 +168,6 @@ export default function Settings() {
             'DeepSeek API 密钥',
             'deepseek',
             'DEEPSEEK_API_KEY',
-            '更新后需要重启应用才能生效'
-          )}
-          
-          <Divider />
-          
-          {renderKeyInput(
-            'Dify API 密钥',
-            'dify',
-            'DIFY_API_KEY',
             '更新后需要重启应用才能生效'
           )}
         </Card>
