@@ -11,6 +11,7 @@ import {
   FiList,
   FiPlusCircle,
   FiSettings,
+  FiTag,
 } from 'react-icons/fi'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
@@ -19,6 +20,7 @@ import clsx from 'clsx'
 const navigation = [
   { name: '首页', href: '/', icon: FiHome },
   { name: '提示词', href: '/prompts', icon: FiFileText },
+  { name: '标签', href: '/tags', icon: FiTag },
   {
     name: '聊天',
     icon: FiMessageSquare,

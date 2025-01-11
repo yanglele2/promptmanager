@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { FiPlus, FiSearch, FiFolder, FiFolderPlus, FiEdit3, FiTrash2, FiTag, FiCopy, FiPlay, FiClock, FiSettings, FiUpload, FiZap } from 'react-icons/fi'
@@ -75,6 +75,7 @@ export default function Prompts() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null)
 
   // 添加编辑处理函数
   const handleEdit = (promptId: string) => {
@@ -395,25 +396,48 @@ export default function Prompts() {
     setShowFolderModal(true)
   }
 
-  // 过滤和排序后的提示词列表
-  const filteredPrompts = prompts.filter((prompt) => {
-    const matchesSearch =
-      prompt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prompt.content.toLowerCase().includes(searchTerm.toLowerCase())
+  // 处理标签点击
+  const handleTagClick = (tagName: string) => {
+    setSelectedTags(prev => {
+      const isSelected = prev.includes(tagName)
+      if (isSelected) {
+        return prev.filter(t => t !== tagName)
+      } else {
+        return [...prev, tagName]
+      }
+    })
+    setCurrentPage(1) // 重置页码
+  }
 
-    const matchesFolder = !selectedFolder || prompt.folder_id === selectedFolder
+  // 过滤提示词
+  const filteredPrompts = useMemo(() => {
+    return prompts.filter(prompt => {
+      // 搜索词过滤
+      const matchesSearch = prompt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        prompt.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        prompt.description?.toLowerCase().includes(searchTerm.toLowerCase())
 
-    if (selectedTags.length === 0) return matchesSearch && matchesFolder
+      // 文件夹过滤
+      const matchesFolder = !currentFolder || prompt.folder_id === currentFolder
 
-    const promptTags = prompt.prompt_tags?.map((pt: PromptTag) => pt.tags.id) ?? []
-    return matchesSearch && matchesFolder && selectedTags.every(tag => promptTags.includes(tag))
-  }).sort((a, b) => {
-    const factor = sortOrder === 'asc' ? 1 : -1
-    if (sortBy === 'title') {
-      return factor * a.title.localeCompare(b.title)
-    }
-    return factor * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-  })
+      // 标签过滤
+      const promptTags = prompt.prompt_tags?.map(pt => pt.tags.name) || []
+      const matchesTags = selectedTags.length === 0 || 
+        selectedTags.some(tag => promptTags.includes(tag))
+
+      return matchesSearch && matchesFolder && matchesTags
+    }).sort((a, b) => {
+      if (sortBy === 'title') {
+        return sortOrder === 'asc' 
+          ? a.title.localeCompare(b.title)
+          : b.title.localeCompare(a.title)
+      } else {
+        return sortOrder === 'asc'
+          ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          : new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+    })
+  }, [prompts, searchTerm, currentFolder, selectedTags, sortBy, sortOrder])
 
   // 分页后的提示词列表
   const paginatedPrompts = filteredPrompts.slice(
@@ -548,430 +572,304 @@ export default function Prompts() {
 
   return (
     <Layout>
-      <div className="px-4 sm:px-6 lg:px-8">
-        <div className="sm:flex sm:items-center">
+      <div className="px-4 sm:px-6 lg:px-8 max-w-[1920px] mx-auto">
+        {/* 顶部区域 */}
+        <div className="sm:flex sm:items-center border-b border-gray-200 pb-6">
           <div className="sm:flex-auto">
-            <h1 className="text-3xl font-bold text-gray-900">提示词库</h1>
-            <p className="mt-2 text-sm text-gray-700">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold bg-gradient-to-r from-indigo-600 to-indigo-400 bg-clip-text text-transparent">提示词库</h1>
+              <span className="px-2 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-full">Beta</span>
+            </div>
+            <p className="mt-2 text-sm text-gray-500">
               管理和组织您的所有AI提示词，提高工作效率
             </p>
           </div>
-          <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none space-x-4">
+          <div className="mt-4 sm:mt-0 sm:ml-16 sm:flex-none flex items-center space-x-3">
             <button
               onClick={() => setShowImportModal(true)}
-              className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+              className="inline-flex items-center px-3.5 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-full text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
             >
-              <FiUpload className="w-4 h-4 mr-2" />
+              <FiUpload className="mr-2 h-4 w-4" />
               批量导入
             </button>
             <button
               onClick={() => setShowGenerateModal(true)}
-              className="inline-flex items-center justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+              className="inline-flex items-center px-3.5 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-full text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-200"
             >
-              <FiZap className="w-4 h-4 mr-2" />
+              <FiZap className="mr-2 h-4 w-4" />
               生成提示词
             </button>
             <Link
               href="/prompts/new"
-              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:w-auto gap-2"
+              className="inline-flex items-center px-3.5 py-2 border border-transparent text-sm font-medium rounded-full text-white bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-200"
             >
-              <FiPlus className="w-4 h-4" />
+              <FiPlus className="mr-2 h-4 w-4" />
               新建提示词
             </Link>
           </div>
         </div>
 
-        <div className="mt-8 space-y-4">
-          <div className="bg-white rounded-lg shadow p-4 mb-4">
+        <div className="mt-8 flex space-x-8">
+          {/* 左侧文件夹列表 */}
+          <div className="w-64 flex-shrink-0">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-medium text-gray-900">文件夹</h2>
+              <h3 className="text-base font-medium text-gray-900">文件夹</h3>
               <button
-                onClick={() => {
-                  setEditingFolder(null)
-                  setFolderName('')
-                  setFolderDescription('')
-                  setShowFolderModal(true)
-                }}
-                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => setShowNewFolderModal(true)}
+                className="p-1.5 rounded-full text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors duration-200"
               >
-                <FiFolderPlus className="mr-1" />
-                新建文件夹
+                <FiFolderPlus className="h-5 w-5" />
               </button>
             </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              <div
-                onClick={(e) => {
-                  e.preventDefault()
-                  setSelectedFolder('')
-                }}
-                className={`cursor-pointer p-4 rounded-lg border ${
-                  selectedFolder === '' 
-                    ? 'border-indigo-500 bg-indigo-50' 
-                    : 'border-gray-200 hover:border-indigo-300'
+            <div className="space-y-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setSelectedFolder('')}
+                className={`w-full text-left px-4 py-2.5 text-sm font-medium border-b border-gray-100 transition-colors duration-200 ${
+                  selectedFolder === '' ? 'bg-gradient-to-r from-indigo-50 to-white text-indigo-700' : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                <div className="flex items-center text-gray-900">
-                  <FiFolder className="mr-2" />
-                  <span>所有提示词</span>
+                <div className="flex items-center">
+                  <FiFolder className={`mr-2 h-4 w-4 ${selectedFolder === '' ? 'text-indigo-500' : 'text-gray-400'}`} />
+                  所有提示词
+                </div>
+              </button>
+              <div className="p-2">
+                {folders.map((folder) => (
+                  <div key={folder.id} className="group relative rounded-lg">
+                    <button
+                      onClick={() => setSelectedFolder(folder.id)}
+                      className={`w-full text-left px-3 py-2 text-sm rounded-md transition-colors duration-200 ${
+                        selectedFolder === folder.id ? 'bg-gradient-to-r from-indigo-50 to-white text-indigo-700' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center">
+                        <FiFolder className={`mr-2 h-4 w-4 ${selectedFolder === folder.id ? 'text-indigo-500' : 'text-gray-400'}`} />
+                        <span className="truncate">{folder.name}</span>
+                      </div>
+                    </button>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center space-x-1">
+                      <button
+                        onClick={(e) => openEditFolder(e, folder)}
+                        className="p-1 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors duration-200"
+                      >
+                        <FiEdit3 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteFolder(folder.id)}
+                        className="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors duration-200"
+                      >
+                        <FiTrash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 右侧内容区域 */}
+          <div className="flex-1">
+            {/* 标签筛选区域 */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-6">
+              {/* 搜索和筛选控件 */}
+              <div className="p-4 border-b border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 max-w-lg">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <FiSearch className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow duration-200"
+                        placeholder="搜索提示词..."
+                      />
+                    </div>
+                  </div>
+                  <div className="ml-4 flex items-center space-x-3">
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'created_at' | 'title')}
+                      className="block pl-3 pr-10 py-2 text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow duration-200"
+                    >
+                      <option value="created_at">按时间</option>
+                      <option value="title">按标题</option>
+                    </select>
+                    <button
+                      onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      className="inline-flex items-center p-2 border border-gray-300 rounded-lg text-gray-500 hover:text-gray-700 hover:border-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all duration-200"
+                    >
+                      <FiClock className={`h-4 w-4 ${sortOrder === 'desc' ? 'transform rotate-180' : ''}`} />
+                    </button>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => setPageSize(Number(e.target.value))}
+                      className="block pl-3 pr-10 py-2 text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow duration-200"
+                    >
+                      <option value="10">10条/页</option>
+                      <option value="20">20条/页</option>
+                      <option value="50">50条/页</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-              
-              {folders.map((folder) => (
+
+              {/* 标签云区域 */}
+              <div className="p-4">
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      onClick={() => handleTagClick(tag.name)}
+                      className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 ${
+                        selectedTags.includes(tag.name)
+                          ? 'bg-indigo-50 text-indigo-700 border-2 border-indigo-200'
+                          : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {tag.name}
+                      {selectedTags.includes(tag.name) && (
+                        <span className="ml-1 text-xs bg-indigo-200 text-indigo-800 px-1.5 rounded-full">
+                          {filteredPrompts.filter(p => 
+                            p.prompt_tags?.some(pt => pt.tags.name === tag.name)
+                          ).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                  {selectedTags.length > 0 && (
+                    <button
+                      onClick={() => setSelectedTags([])}
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all duration-200"
+                    >
+                      清除筛选
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 提示词卡片列表 */}
+            <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+              {filteredPrompts.map((prompt) => (
                 <div
-                  key={folder.id}
-                  className={`relative p-4 rounded-lg border ${
-                    selectedFolder === folder.id 
-                      ? 'border-indigo-500 bg-indigo-50' 
-                      : 'border-gray-200 hover:border-indigo-300'
+                  key={prompt.id}
+                  className={`group relative bg-white rounded-xl shadow-sm border border-gray-200 hover:border-indigo-200 hover:shadow-md transition-all duration-300 ${
+                    prompt.id === selectedCardId ? 'ring-2 ring-indigo-500' : ''
                   }`}
+                  style={{ height: '260px' }}
+                  onClick={() => {
+                    if (isManaging) {
+                      setSelectedPrompts(prev =>
+                        prev.includes(prompt.id)
+                          ? prev.filter(id => id !== prompt.id)
+                          : [...prev, prompt.id]
+                      )
+                    } else {
+                      router.push(`/prompts/${prompt.id}`)
+                    }
+                  }}
                 >
-                  <div 
-                    className="flex-1 cursor-pointer"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setSelectedFolder(folder.id)
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center text-gray-900">
-                        <FiFolder className="mr-2" />
-                        <span>{folder.name}</span>
+                  <div className="p-6 h-full flex flex-col">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1 min-w-0 pr-4">
+                        <h3 className="text-lg font-medium text-gray-900 truncate group-hover:text-indigo-600 transition-colors duration-200">
+                          {prompt.title}
+                        </h3>
+                        <p className="mt-1 text-sm text-gray-500 line-clamp-2">
+                          {prompt.description}
+                        </p>
                       </div>
-                      <div className="flex space-x-1">
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
                         <button
                           onClick={(e) => {
-                            e.preventDefault()
                             e.stopPropagation()
-                            setEditingFolder(folder)
-                            setFolderName(folder.name)
-                            setFolderDescription(folder.description || '')
-                            setShowFolderModal(true)
+                            handleEdit(prompt.id)
                           }}
-                          className="p-1 text-gray-500 hover:text-indigo-600"
+                          className="p-2 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors duration-200"
                         >
-                          <FiEdit3 size={14} />
+                          <FiEdit3 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={(e) => {
-                            e.preventDefault()
                             e.stopPropagation()
-                            handleDeleteFolder(folder.id)
+                            handleDelete(prompt.id)
                           }}
-                          className="p-1 text-gray-500 hover:text-red-600"
+                          className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors duration-200"
                         >
-                          <FiTrash2 size={14} />
+                          <FiTrash2 className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
-                    {folder.description && (
-                      <p className="mt-1 text-sm text-gray-500 truncate">
-                        {folder.description}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="搜索提示词..."
-                className="block w-full pl-10 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-4">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'created_at' | 'title')}
-                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              >
-                <option value="created_at">按时间</option>
-                <option value="title">按标题</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
-              >
-                {sortOrder === 'asc' ? '升序' : '降序'}
-              </button>
-              <button
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
-              >
-                {viewMode === 'grid' ? '列表视图' : '网格视图'}
-              </button>
-                <button
-                onClick={() => setIsManaging(!isManaging)}
-                className="p-2 rounded-md border border-gray-300 hover:bg-gray-50"
-                >
-                <FiSettings className={`w-5 h-5 ${isManaging ? 'text-indigo-600' : 'text-gray-500'}`} />
-                </button>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value))
-                  setCurrentPage(1)
-                }}
-                className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              >
-                <option value="10">10条/页</option>
-                <option value="30">30条/页</option>
-                <option value="50">50条/页</option>
-              </select>
-              </div>
-            </div>
-
-          {isManaging && (
-            <div className="bg-gray-50 p-4 rounded-lg mt-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <label className="flex items-center">
-                    <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    checked={selectedPrompts.length === filteredPrompts.length}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedPrompts(filteredPrompts.map(p => p.id))
-                      } else {
-                        setSelectedPrompts([])
-                      }
-                    }}
-                  />
-                  <span className="ml-2 text-sm text-gray-700">全选</span>
-                </label>
-                <span className="text-sm text-gray-500">
-                  已选择 {selectedPrompts.length} 项
-                </span>
-                  </div>
-              <div className="flex gap-2">
-                  <button
-                  onClick={handleBatchDelete}
-                  disabled={selectedPrompts.length === 0}
-                  className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-                >
-                  <FiTrash2 className="mr-1.5 h-4 w-4" />
-                  批量删除
-                  </button>
-            </div>
-          </div>
-        )}
-
-          {/* 暂时隐藏标签筛选功能 */}
-          {/* <TagFilter
-            tags={tags}
-            selectedTags={selectedTags}
-            onTagSelect={(tagId: string) => {
-              setSelectedTags((prev) =>
-                prev.includes(tagId)
-                  ? prev.filter((id) => id !== tagId)
-                  : [...prev, tagId]
-              )
-            }}
-          /> */}
-        </div>
-
-        <div className="mt-8">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-              <p className="mt-2 text-gray-500">加载中...</p>
-            </div>
-          ) : filteredPrompts.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-lg shadow">
-              <FiSearch className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-2 text-sm font-medium text-gray-900">未找到提示词</h3>
-              <p className="mt-1 text-sm text-gray-500">开始创建您的第一个提示词吧</p>
-              <div className="mt-6">
-                <Link
-                  href="/prompts/new"
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                >
-                  <FiPlus className="-ml-1 mr-2 h-5 w-5" aria-hidden="true" />
-                  新建提示词
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                {filteredPrompts.map((prompt) => (
-                  <div
-                    key={prompt.id}
-                    className={`relative bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200 ${
-                      prompt.id === selectedCardId ? 'bg-blue-50' : ''
-                    } hover:bg-blue-50`}
-                    style={{ height: '240px' }}
-                    onClick={() => {
-                      if (isManaging) {
-                        setSelectedPrompts(prev =>
-                          prev.includes(prompt.id)
-                            ? prev.filter(id => id !== prompt.id)
-                            : [...prev, prompt.id]
-                        )
-                      } else {
-                        router.push(`/prompts/${prompt.id}`)
-                      }
-                    }}
-                  >
-                    <div className="p-6 h-full flex flex-col">
-                      <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-lg font-medium text-gray-900 truncate flex-1 pr-4">
-                          {prompt.title}
-                        </h3>
-                        <div className="flex items-center gap-2 ml-4 flex-shrink-0">
-                        <select
-                          value={prompt.folder_id || ''}
-                            onChange={(e) => handleFolderChange(prompt.id, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                        >
-                          <option value="">选择文件夹</option>
-                          {folders.map((folder) => (
-                            <option key={folder.id} value={folder.id}>
-                              {folder.name}
-                            </option>
-                          ))}
-                        </select>
-                          {isManaging && (
-                            <input
-                              type="checkbox"
-                              checked={selectedPrompts.includes(prompt.id)}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                setSelectedPrompts(prev =>
-                                  prev.includes(prompt.id)
-                                    ? prev.filter(id => id !== prompt.id)
-                                    : [...prev, prompt.id]
-                                )
-                              }}
-                              className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            />
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEdit(prompt.id)
-                            }}
-                            className="p-1 text-gray-500 hover:text-indigo-600"
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div className="flex flex-wrap gap-2">
+                        {prompt.prompt_tags?.map((pt: PromptTag) => (
+                          <span
+                            key={pt.tags.id}
+                            className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 transition-colors duration-200 hover:bg-indigo-100"
                           >
-                            <FiEdit3 size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDelete(prompt.id)
-                            }}
-                            className="p-1 text-gray-500 hover:text-red-600"
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
-                        </div>
+                            <FiTag className="mr-1.5 h-3 w-3" />
+                            {pt.tags.name}
+                          </span>
+                        ))}
                       </div>
-                      <p className="text-sm text-gray-500 line-clamp-2 flex-1">
-                        {prompt.description}
-                      </p>
-                      <div className="mt-auto">
-                        <div className="flex flex-wrap gap-2 mb-4">
-                          {prompt.prompt_tags?.map((pt: PromptTag) => (
-                            <span
-                              key={pt.tags.id}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-800"
+
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="text-xs text-gray-500 flex items-center">
+                              <FiClock className="mr-1.5 h-3.5 w-3.5" />
+                              {new Date(prompt.created_at).toLocaleDateString()}
+                            </div>
+                            <select
+                              value={prompt.folder_id || ''}
+                              onChange={(e) => handleFolderChange(prompt.id, e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs border-gray-200 rounded-lg shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-transparent transition-shadow duration-200"
                             >
-                              <FiTag className="mr-1.5 h-3 w-3" />
-                              {pt.tags.name}
-                            </span>
-                          ))}
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="text-sm text-gray-500 flex items-center">
-                            <FiClock className="mr-1.5 h-4 w-4" />
-                          {new Date(prompt.created_at).toLocaleDateString()}
-                        </div>
+                              <option value="">选择文件夹</option>
+                              {folders.map((folder) => (
+                                <option key={folder.id} value={folder.id}>
+                                  {folder.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <div className="flex gap-2">
-                          <button
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 navigator.clipboard.writeText(prompt.content)
                                   .then(() => toast.success('提示词已复制到剪贴板'))
                                   .catch(() => toast.error('复制失败'))
                               }}
-                              className="inline-flex items-center px-2 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 border border-gray-200 transition-colors duration-200"
                             >
-                              <FiCopy className="mr-1.5 h-4 w-4" />
-                              复制提示词内容
-                          </button>
-                          <button
+                              <FiCopy className="mr-1.5 h-3.5 w-3.5" />
+                              复制
+                            </button>
+                            <button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 router.replace(`/chat/new?content=${encodeURIComponent(prompt.content)}`)
                               }}
-                              className="inline-flex items-center px-2 py-1 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 border border-indigo-200 transition-colors duration-200"
                             >
-                              <FiPlay className="mr-1.5 h-4 w-4" />
+                              <FiPlay className="mr-1.5 h-3.5 w-3.5" />
                               运行
-                          </button>
-                        </div>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="flex justify-between items-center mt-4">
-                <div className="text-sm text-gray-700">
-                  显示第 <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> 到{' '}
-                  <span className="font-medium">
-                    {Math.min(currentPage * pageSize, filteredPrompts.length)}
-                  </span>{' '}
-                  条，共{' '}
-                  <span className="font-medium">{filteredPrompts.length}</span> 条
                 </div>
-                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
-                  >
-                    <span className="sr-only">上一页</span>
-                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                  {Array.from({ length: Math.ceil(filteredPrompts.length / pageSize), }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                        page === currentPage
-                          ? 'z-10 bg-indigo-600 text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600'
-                          : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(filteredPrompts.length / pageSize)))}
-                    disabled={currentPage === Math.ceil(filteredPrompts.length / pageSize)}
-                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0"
-                  >
-                    <span className="sr-only">下一页</span>
-                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                </nav>
-              </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

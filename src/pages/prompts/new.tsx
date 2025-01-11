@@ -4,6 +4,7 @@ import { useSession } from 'next-auth/react'
 import Layout from '@/components/Layout'
 import { supabase } from '@/lib/supabase'
 import { useStore } from '@/lib/store'
+import { FiSave, FiTag, FiArrowLeft, FiRefreshCw, FiEdit3, FiAlignLeft, FiInfo, FiCode, FiTarget, FiFolderPlus } from 'react-icons/fi'
 import type { Tag, Folder } from '@/types/index'
 import { toast } from 'react-hot-toast'
 
@@ -231,121 +232,230 @@ export default function NewPrompt() {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-semibold text-gray-900">新建提示词</h1>
-          <button
-            onClick={() => router.push('/prompts')}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            返回提示词库
-          </button>
-        </div>
-        
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* 标题 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">标题</label>
-            <input
-              type="text"
-              name="title"
-              required
-              value={formData.title}
-              onChange={handleChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-          </div>
-
-          {/* 内容 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">内容</label>
-            <textarea
-              name="content"
-              required
-              rows={5}
-              value={formData.content}
-              onChange={handleChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
-          </div>
-
-          {/* 描述 */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">描述</label>
+      <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* 顶部导航栏 */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-4">
               <button
-                type="button"
-                onClick={handleAutoDescription}
-                disabled={generatingDesc}
-                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                onClick={() => router.push('/prompts')}
+                className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 focus:outline-none transition-colors duration-200"
               >
-                {generatingDesc ? '生成中...' : '自动生成描述'}
+                <FiArrowLeft className="h-5 w-5 mr-1" />
+                返回提示词库
               </button>
             </div>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={3}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            />
+            <button
+              type="submit"
+              form="prompt-form"
+              disabled={saving}
+              className="inline-flex items-center px-6 py-2.5 text-sm font-medium rounded-full text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none shadow-lg shadow-indigo-200 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiSave className="h-4 w-4 mr-2" />
+              {saving ? '保存中...' : '保存提示词'}
+            </button>
           </div>
 
-          {/* 标签管理 */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">标签</label>
-              <button
-                type="button"
-                onClick={handleAutoTag}
-                disabled={autoTagging}
-                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {autoTagging ? '生成中...' : '自动生成标签'}
-              </button>
-            </div>
-            <textarea
-              value={formData.tags.join(', ')}
-              onChange={handleTagsChange}
-              placeholder="输入标签，用逗号分隔"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              rows={2}
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              多个标签请用逗号分隔，例如：AI, 编辑建议, 内容优化
+          {/* 标题区域 */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">
+              创建新的提示词
+            </h1>
+            <p className="mt-2 text-sm text-gray-500">
+              编写高质量的提示词，帮助 AI 更好地理解和执行任务
             </p>
           </div>
 
-          {/* 文件夹选择 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              选择文件夹（可选）
-            </label>
-            <select
-              value={selectedFolderId}
-              onChange={(e) => setSelectedFolderId(e.target.value)}
-              className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-            >
-              <option value="">不选择文件夹</option>
-              {folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {folder.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <form id="prompt-form" onSubmit={handleSubmit} className="space-y-6">
+            {/* 主要内容区域 */}
+            <div className="grid grid-cols-3 gap-6">
+              {/* 左侧：标题和内容 */}
+              <div className="col-span-2 space-y-6">
+                {/* 标题输入 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <FiEdit3 className="h-5 w-5 text-gray-400" />
+                    <label htmlFor="title" className="block text-base font-medium text-gray-900">
+                      标题
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    id="title"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleChange}
+                    required
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-base"
+                    placeholder="为你的提示词起个标题..."
+                  />
+                </div>
 
-          {/* 提交按钮 */}
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-            >
-              {saving ? '保存中...' : '保存'}
-            </button>
-          </div>
-        </form>
+                {/* 内容输入 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <FiAlignLeft className="h-5 w-5 text-gray-400" />
+                    <label htmlFor="content" className="block text-base font-medium text-gray-900">
+                      内容
+                    </label>
+                  </div>
+                  <textarea
+                    id="content"
+                    name="content"
+                    value={formData.content}
+                    onChange={handleChange}
+                    required
+                    rows={12}
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 text-base font-mono"
+                    placeholder="编写你的提示词内容..."
+                  />
+                </div>
+              </div>
+
+              {/* 右侧：其他信息 */}
+              <div className="space-y-6">
+                {/* 描述输入 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <FiInfo className="h-5 w-5 text-gray-400" />
+                      <label htmlFor="description" className="block text-base font-medium text-gray-900">
+                        描述
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoDescription}
+                      disabled={generatingDesc}
+                      className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none transition-colors duration-200 disabled:opacity-50"
+                    >
+                      <FiRefreshCw className={`h-3 w-3 mr-1 ${generatingDesc ? 'animate-spin' : ''}`} />
+                      AI 生成
+                    </button>
+                  </div>
+                  <textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    rows={3}
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
+                    placeholder="描述这个提示词的用途..."
+                  />
+                </div>
+
+                {/* 标签输入 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <FiTag className="h-5 w-5 text-gray-400" />
+                      <label htmlFor="tags" className="block text-base font-medium text-gray-900">
+                        标签
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoTag}
+                      disabled={autoTagging}
+                      className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-full text-blue-600 hover:text-blue-500 hover:bg-blue-50 focus:outline-none transition-colors duration-200 disabled:opacity-50"
+                    >
+                      <FiRefreshCw className={`h-3 w-3 mr-1 ${autoTagging ? 'animate-spin' : ''}`} />
+                      AI 生成
+                    </button>
+                  </div>
+                  <textarea
+                    id="tags"
+                    name="tags"
+                    value={formData.tags.join(', ')}
+                    onChange={handleTagsChange}
+                    rows={2}
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
+                    placeholder="输入标签，用逗号分隔..."
+                  />
+                  {formData.tags.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {formData.tags.map((tag, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                        >
+                          <FiTag className="h-3 w-3 mr-1" />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* 文件夹选择 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <FiFolderPlus className="h-5 w-5 text-gray-400" />
+                    <label htmlFor="folder" className="block text-base font-medium text-gray-900">
+                      保存到文件夹
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <select
+                      id="folder"
+                      value={selectedFolderId}
+                      onChange={(e) => setSelectedFolderId(e.target.value)}
+                      className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200 appearance-none"
+                    >
+                      <option value="">选择文件夹...</option>
+                      {folders.map((folder) => (
+                        <option key={folder.id} value={folder.id}>
+                          {folder.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                      <FiFolderPlus className="h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 语言选择 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <FiCode className="h-5 w-5 text-gray-400" />
+                    <label htmlFor="language" className="block text-base font-medium text-gray-900">
+                      语言
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    id="language"
+                    name="language"
+                    value={formData.language}
+                    onChange={handleChange}
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
+                    placeholder="提示词使用的语言..."
+                  />
+                </div>
+
+                {/* 用途输入 */}
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <FiTarget className="h-5 w-5 text-gray-400" />
+                    <label htmlFor="purpose" className="block text-base font-medium text-gray-900">
+                      用途
+                    </label>
+                  </div>
+                  <input
+                    type="text"
+                    id="purpose"
+                    name="purpose"
+                    value={formData.purpose}
+                    onChange={handleChange}
+                    className="block w-full px-4 py-3 bg-gray-50 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 transition-shadow duration-200"
+                    placeholder="提示词的使用场景..."
+                  />
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
       </div>
     </Layout>
   )
