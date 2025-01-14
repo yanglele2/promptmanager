@@ -50,6 +50,18 @@ interface PromptWithTags extends Prompt {
   use_count?: number
 }
 
+interface SmartSearchResult {
+  id: string
+  title: string
+  description: string
+  content: string
+  match_score: number
+  tags: Array<{
+    id: string
+    name: string
+  }>
+}
+
 export default function Prompts() {
   const router = useRouter()
   const { session } = useSession()
@@ -79,6 +91,10 @@ export default function Prompts() {
   const [showImportModal, setShowImportModal] = useState(false)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [showSmartSearchModal, setShowSmartSearchModal] = useState(false)
+  const [smartSearchQuery, setSmartSearchQuery] = useState('')
+  const [smartSearchResults, setSmartSearchResults] = useState<SmartSearchResult[]>([])
+  const [isSearching, setIsSearching] = useState(false)
   
   // 新增状态变量
   const [showSidebar, setShowSidebar] = useState(true)
@@ -814,6 +830,211 @@ export default function Prompts() {
     )
   }
 
+  // 添加智能搜索模态框组件
+  const SmartSearchModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+    const [searchInput, setSearchInput] = useState('')
+    const [isSearching, setIsSearching] = useState(false)
+    const [localSearchResults, setLocalSearchResults] = useState<SmartSearchResult[]>([])
+
+    const handleSearch = async () => {
+      if (!searchInput.trim()) {
+        toast.error('请输入搜索内容')
+        return
+      }
+
+      try {
+        setIsSearching(true)
+        const response = await fetch('/api/prompts/smart-search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ query: searchInput }),
+        })
+
+        if (!response.ok) {
+          throw new Error('搜索请求失败')
+        }
+
+        const data = await response.json()
+        
+        if (data.success) {
+          setLocalSearchResults(data.data.results || [])
+          if (data.data.message) {
+            toast(data.data.message, {
+              icon: '⚠️',
+              duration: 3000
+            })
+          }
+        } else {
+          throw new Error(data.error || '搜索失败')
+        }
+      } catch (error) {
+        console.error('智能搜索失败:', error)
+        toast.error('搜索失败，请重试')
+      } finally {
+        setIsSearching(false)
+      }
+    }
+
+    // 清理函数
+    useEffect(() => {
+      if (!isOpen) {
+        setSearchInput('')
+        setLocalSearchResults([])
+      }
+    }, [isOpen])
+
+    return (
+      <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={onClose}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/25 backdrop-blur-sm" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <Dialog.Panel className="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white p-6 text-left align-middle shadow-xl transition-all">
+                  <Dialog.Title
+                    as="h3"
+                    className="text-lg font-semibold leading-6 text-gray-900 flex items-center gap-2 mb-4"
+                  >
+                    <div className="p-2 bg-indigo-100 rounded-lg">
+                      <FiZap className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    AI 智能搜索
+                  </Dialog.Title>
+
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-gray-500">
+                          使用自然语言描述您要搜索的内容
+                        </p>
+                        <div className="text-xs text-gray-400">
+                          例如：帮我找一个写文章的提示词
+                        </div>
+                      </div>
+                      <div className="mt-2 relative">
+                        <textarea
+                          rows={3}
+                          className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm resize-none"
+                          placeholder="请输入您的搜索需求..."
+                          value={searchInput}
+                          onChange={(e) => setSearchInput(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 bottom-2 inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed gap-1.5 transition-colors"
+                          onClick={handleSearch}
+                          disabled={isSearching || !searchInput.trim()}
+                        >
+                          {isSearching ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              搜索中...
+                            </>
+                          ) : (
+                            <>
+                              <FiZap className="w-4 h-4" />
+                              开始搜索
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 搜索结果区域 */}
+                    {localSearchResults.length > 0 && (
+                      <div className="mt-6">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-medium text-gray-900">
+                            搜索结果
+                          </h4>
+                          <span className="text-xs text-gray-500">
+                            找到 {localSearchResults.length} 个相关提示词
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          {localSearchResults.map((result) => (
+                            <div
+                              key={result.id}
+                              className="bg-white rounded-lg p-4 border border-gray-200 hover:border-indigo-500 hover:shadow-md transition-all cursor-pointer group"
+                              onClick={() => {
+                                router.push(`/prompts/${result.id}`)
+                                onClose()
+                              }}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <h5 className="text-sm font-medium text-gray-900 truncate group-hover:text-indigo-600">
+                                    {result.title}
+                                  </h5>
+                                  <p className="mt-1 text-xs text-gray-500 line-clamp-2">
+                                    {result.description}
+                                  </p>
+                                </div>
+                                <div className="ml-4 flex-shrink-0">
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                    匹配度 {Math.round(result.match_score)}%
+                                  </span>
+                                </div>
+                              </div>
+                              {result.tags?.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-1">
+                                  {result.tags.map((tag) => (
+                                    <span
+                                      key={tag.id}
+                                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"
+                                    >
+                                      <FiTag className="mr-1 h-3 w-3" />
+                                      {tag.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      className="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      onClick={onClose}
+                    >
+                      关闭
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    )
+  }
+
   if (error) {
     return (
       <Layout>
@@ -1044,10 +1265,20 @@ export default function Prompts() {
                 <input
                   type="text"
                   placeholder="搜索提示词..."
-                  className="block w-full pl-10 pr-3 py-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                  className="block w-full pl-10 pr-24 py-2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
+                <button
+                  onClick={() => setShowSmartSearchModal(true)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 hover:text-indigo-600 transition-colors group"
+                  title="AI智能搜索"
+                >
+                  <div className="flex items-center gap-1.5 pr-1 border-l border-gray-200 pl-3">
+                    <FiZap className="h-4 w-4 group-hover:text-yellow-500 transition-colors" />
+                    <span className="text-sm group-hover:text-indigo-600">智能搜索</span>
+                  </div>
+                </button>
               </div>
               
               <div className="flex flex-wrap items-center gap-3">
@@ -1247,6 +1478,10 @@ export default function Prompts() {
           setFolderName('')
           setFolderDescription('')
         }}
+      />
+      <SmartSearchModal
+        isOpen={showSmartSearchModal}
+        onClose={() => setShowSmartSearchModal(false)}
       />
     </Layout>
   )
