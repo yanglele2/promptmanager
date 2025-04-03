@@ -164,8 +164,9 @@ export default function ChatDetail() {
       if (userMessageError) throw userMessageError
 
       // 更新消息列表
+      const tempUserId = `temp-user-msg-${Date.now()}`
       const userMessage = {
-        id: 'temp-user-msg',
+        id: tempUserId,
         chat_id: id as string,
         role: 'user' as const,
         content: newMessage,
@@ -214,10 +215,11 @@ export default function ChatDetail() {
         if (aiMessageError) throw aiMessageError
 
         // 更新消息列表
+        const tempAiId = `temp-ai-msg-${Date.now()}`
         setMessages(prevMessages => [
           ...prevMessages,
           {
-            id: 'temp-ai-msg',
+            id: tempAiId,
             chat_id: id as string,
             role: 'assistant',
             content: data.response,

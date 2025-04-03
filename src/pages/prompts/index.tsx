@@ -189,7 +189,19 @@ export default function Prompts() {
 
   async function fetchPrompts() {
     try {
-      console.log('获取提示词数据...')
+      console.log('开始获取提示词数据...')
+      
+      // 检查Supabase客户端是否正确初始化
+      if (!supabase) {
+        console.error('Supabase客户端未初始化')
+        setError('数据库连接未初始化')
+        return []
+      }
+      
+      // 添加延迟以确保连接已建立
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      console.log('执行Supabase查询...')
       const { data, error } = await supabase
         .from('prompts')
         .select(`
@@ -199,25 +211,26 @@ export default function Prompts() {
               id,
               name
             )
-          ),
-          prompt_folders!prompt_id(
-            folder_id
           )
         `)
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Supabase 错误:', error)
-        throw error
+        setError(`获取数据失败: ${error.message}`)
+        return []
       }
       
-      // 处理数据，将文件夹ID添加到提示词对象中
-      const processedData = data?.map(prompt => ({
-        ...prompt,
-        folder_id: prompt.prompt_folders?.[0]?.folder_id || null
-      })) || []
+      // 处理数据
+      const processedData = data || []
       
-      console.log('提示词数据:', processedData)
+      console.log(`成功获取 ${processedData.length} 条提示词数据`)
+      if (processedData.length > 0) {
+        console.log('第一条数据示例:', JSON.stringify(processedData[0], null, 2))
+      } else {
+        console.log('数据库中没有提示词数据')
+      }
+      
       setPrompts(processedData)
       return processedData
     } catch (error) {
@@ -404,16 +417,23 @@ export default function Prompts() {
 
   // 过滤和排序后的提示词列表
   const filteredPrompts = prompts.filter((prompt) => {
+    // u6839u636eu641cu7d22u8bcdu7b5bu9009
     const matchesSearch =
       prompt.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       prompt.content.toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesFolder = !selectedFolder || prompt.folder_id === selectedFolder
-
+    // u6682u65f6u5ffdu7565u6587u4ef6u5939u7b5bu9009uff0cu56e0u4e3au6211u4eecu5df2u7ecfu79fbu9664u4e86folder_idu5b57u6bb5
+    // const matchesFolder = !selectedFolder || prompt.folder_id === selectedFolder
+    const matchesFolder = true // u6682u65f6u5ffdu7565u6587u4ef6u5939u7b5bu9009
+    
     if (selectedTags.length === 0) return matchesSearch && matchesFolder
 
-    const promptTags = prompt.prompt_tags?.map((pt: PromptTag) => pt.tags.id) ?? []
-    return matchesSearch && matchesFolder && selectedTags.every(tag => promptTags.includes(tag))
+    // u5b89u5168u5730u83b7u53d6u6807u7b7e列u8868
+    const promptTags = prompt.prompt_tags && Array.isArray(prompt.prompt_tags) 
+      ? prompt.prompt_tags.map((pt: PromptTag) => pt.tags?.id).filter(Boolean) 
+      : []
+      
+    return matchesSearch && matchesFolder && (promptTags.length === 0 || selectedTags.every(tag => promptTags.includes(tag)))
   }).sort((a, b) => {
     const factor = sortOrder === 'asc' ? 1 : -1
     if (sortBy === 'title') {
@@ -652,15 +672,15 @@ export default function Prompts() {
               {prompt.description}
             </p>
             <div className="flex flex-wrap gap-1.5 mb-3">
-              {prompt.prompt_tags?.map((pt: PromptTag) => (
+              {prompt.prompt_tags && Array.isArray(prompt.prompt_tags) ? prompt.prompt_tags.map((pt: PromptTag) => (
                 <span
-                  key={pt.tags.id}
+                  key={pt.tags?.id || 'tag'}
                   className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700"
                 >
                   <FiTag className="mr-1 h-3 w-3" />
-                  {pt.tags.name}
+                  {pt.tags?.name || '标签'}
                 </span>
-              ))}
+              )) : null}
             </div>
           </div>
 
@@ -1045,6 +1065,29 @@ export default function Prompts() {
 
   return (
     <Layout>
+      {/* 错误提示 */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md shadow-sm mx-4 mt-4" role="alert">
+          <div className="flex">
+            <div className="py-1">
+              <svg className="fill-current h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                <path d="M2.93 17.07A10 10 0 1 1 17.07 2.93 10 10 0 0 1 2.93 17.07zm12.73-1.41A8 8 0 1 0 4.34 4.34a8 8 0 0 0 10.32 10.32zM10 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm0-8.5a1 1 0 0 0-1 1v3a1 1 0 0 0 2 0V6a1 1 0 0 0-1-1z" />
+              </svg>
+            </div>
+            <div>
+              <p className="font-bold">数据加载错误</p>
+              <p className="text-sm">{error}</p>
+              <button 
+                className="mt-2 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                onClick={() => window.location.reload()}
+              >
+                刷新页面
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="flex h-[calc(100vh-64px)]">
         {/* 窄边栏 - 用于展开按钮 */}
         {!showSidebar && (
